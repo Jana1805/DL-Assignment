@@ -1,0 +1,6 @@
+*
+!requirements.txt
+!jit/
+!app/
+!artifacts/
+**/__pycache__/

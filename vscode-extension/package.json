@@ -1,0 +1,76 @@
+{
+  "name": "jit-commit-risk",
+  "displayName": "JIT Commit Risk",
+  "description": "Shows a bug-risk score for each commit, from a Just-In-Time defect prediction model.",
+  "version": "0.1.0",
+  "publisher": "janahan",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "extensionDependencies": [
+    "vscode.git"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "jitRisk.scoreStaged",
+        "title": "JIT Risk: Score staged changes"
+      },
+      {
+        "command": "jitRisk.scoreLastCommit",
+        "title": "JIT Risk: Score last commit"
+      }
+    ],
+    "configuration": {
+      "title": "JIT Commit Risk",
+      "properties": {
+        "jitRisk.apiUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "Base URL of the risk prediction API."
+        },
+        "jitRisk.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Sent as the X-API-Key header, if the API requires one."
+        },
+        "jitRisk.notify": {
+          "type": "string",
+          "enum": [
+            "risky",
+            "always",
+            "never"
+          ],
+          "default": "risky",
+          "description": "When to show a notification after a commit is scored. The status bar always updates."
+        },
+        "jitRisk.timeoutMs": {
+          "type": "number",
+          "default": 8000,
+          "description": "How long to wait for the API before giving up."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "test": "tsc -p . && node --test \"out/test/**/*.test.js\"",
+    "calibrate": "tsc -p . && node out/calibrate.js",
+    "package": "vsce package --allow-missing-repository --skip-license",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -1,30 +1,165 @@
-# ApacheJIT: A Large Dataset for Just-In-Time Defect Prediction
+# Just-In-Time Software Defect Prediction on ApacheJIT
 
-This archive contains the **ApacheJIT** dataset presented in the paper "ApacheJIT: A Large Dataset for Just-In-Time Defect Prediction" as well as the replication package. The paper is submitted to **MSR 2022 Data Showcase Track**.
+Predicts whether a Git commit introduces a bug, from structural change metrics
+available at commit time. The repository has two parts:
 
-The datasets are available under directory <em>dataset</em>. There are 4 datasets in this directory. 
+1. **Research notebooks** comparing deep learning models on the ApacheJIT dataset
+   (SE4050 Deep Learning Assignment, 2026, SLIIT).
+2. **A production path** for the chosen model: a prediction API and a VS Code
+   extension that shows a risk score every time you commit.
 
-1. **apachejit_total.csv**: This file contains the entire dataset. Commits are specified by their identifier and a set of commit metrics that are explained in the paper are provided as features. Column <em>buggy</em> specifies whether or not the commit introduced any bug into the system. 
-2. **apachejit_train.csv**: This file is a subset of the entire dataset. It provides a balanced set that we recommend for models that are sensitive to class imbalance. This set is obtained from the first 14 years of data (2003 to 2016).
-3. **apachejit_test_large.csv**: This file is a subset of the entire dataset. The commits in this file are the commits from the last 3 years of data. This set is not balanced to represent a real-life scenario in a JIT model evaluation where the model is trained on historical data to be applied on future data without any modification.
-4. **apachejit_test_small.csv**: This file is a subset of the test file explained above. Since the test file has more than 30,000 commits, we also provide a smaller test set which is still unbalanced and from the last 3 years of data.
+## Dataset
 
-In addition to the dataset, we also provide the scripts using which we built the dataset. These scripts are written in Python 3.8. Therefore, Python 3.8 or above is required. To set up the environment, we have provided a list of required packages in file <em>requirements.txt</em>. Additionally, one filtering step requires GumTree [1]. For Java, GumTree requires Java 11. For other languages, external tools are needed. Installation guide and more details can be found [here](https://github.com/GumTreeDiff/gumtree/wiki/Getting-Started).
+**ApacheJIT** (Keshavarz & Nagappan, 2022): 106,674 commits from 14 Apache
+projects, each with 12 change metrics and a `buggy` label derived with the SZZ
+algorithm. Source: https://zenodo.org/records/5907002 (CC BY 4.0). The CSV
+files are in `dataset/`.
 
-The scripts are comprised of Python scripts under directory <em>src</em> and Python notebooks under directory <em>notebooks</em>. The Python scripts are mainly responsible for conducting GitHub search via GitHub search API and collecting commits through PyDriller Package [2]. The notebooks link the fixed issue reports with their corresponding fixing commits and apply some filtering steps. The bug-inducing candidates then are filtered again using <em>gumtree.py</em> script that utilizes the GumTree package. Finally, the remaining bug-inducing candidates are combined with the clean commits in the <em>dataset_construction</em> notebook to form the entire dataset.
+## Repository layout
 
-More specifically, <em>git_token</em> handles GitHub API token that is necessary for requests to GitHub API. Script <em>collector</em> performs GitHub search. Tracing changed lines and git annotate is done in <em>gitminer</em> using PyDriller. Finally, <em>gumtree</em> applies 4 filtering steps (number of lines, number of files, language, and change significance).
+```
+notebooks/            Preprocessing (v1, v2), Deep MLP (v1, v2), TabNet (v1, v2)
+dataset/              ApacheJIT CSV files
+jit/                  features.py   v2 feature engineering, shared by training and serving
+                      model.py      Deep MLP architecture
+                      train.py      trains the model and exports it to ONNX
+                      artifacts.py  loads and verifies the exported model
+app/main.py           FastAPI service
+artifacts/            model.onnx and metadata.json (output of jit.train)
+tests/                service tests
+vscode-extension/     the VS Code extension
+deploy/huggingface/   files for hosting the API on Hugging Face Spaces
+config.json           hyperparameters and split boundaries used in the notebooks
+```
 
-References:
+## Results
 
-**1. GumTree** 
+All models use a chronological split (train 2003–2014, validation 2015–2016,
+test 2017–2019), class weighting, and a decision threshold tuned on validation
+data only. Test-set results from the notebooks:
 
-* [https://github.com/GumTreeDiff/gumtree](https://github.com/GumTreeDiff/gumtree)
+| Model | Features | F1 | ROC-AUC | PR-AUC |
+|---|---|---|---|---|
+| Deep MLP | v1 (12 raw) | 0.4778 | 0.7775 | 0.4713 |
+| Deep MLP | v2 (17 engineered) | 0.4788 | 0.7908 | 0.4863 |
+| TabNet | v1 | 0.4756 | 0.7835 | 0.4530 |
+| TabNet | v2 | 0.4743 | 0.7804 | 0.4659 |
 
-* Jean-Rémy Falleri, Floréal Morandat, Xavier Blanc, Matias Martinez, and Martin Monperrus. 2014.  Fine-grained and accurate source code differencing. In ACM/IEEE International Conference on Automated Software Engineering, ASE ’14,Vasteras, Sweden - September 15 - 19, 2014. 313–324
+The F1 differences are within seed-to-seed noise (about ±0.005 in the MLP seed
+sweep). **Deep MLP on v2 features** is the model served in production: it has
+the highest ROC-AUC and PR-AUC.
 
-**2. PyDriller**
+## Production service
 
-* [https://pydriller.readthedocs.io/en/latest/](https://pydriller.readthedocs.io/en/latest/)
+### Setup
 
-* Davide Spadini, Maurício Aniche, and Alberto Bacchelli. 2018. PyDriller: Python Framework for Mining Software Repositories. In Proceedings of the 2018 26th ACM Joint Meeting on European Software Engineering Conference and Symposium on the Foundations of Software Engineering(Lake Buena Vista, FL, USA)(ESEC/FSE2018). Association for Computing Machinery, New York, NY, USA, 908–911
+```bash
+python -m venv .venv
+.venv\Scripts\activate            # Windows; use source .venv/bin/activate elsewhere
+pip install -r requirements-dev.txt
+```
+
+`requirements.txt` is what the server needs. `requirements-train.txt` adds
+PyTorch for training, and `requirements-dev.txt` adds the test tools.
+
+### Train
+
+```bash
+python -m jit.train --data dataset/apachejit_total.csv --out artifacts
+```
+
+This reproduces `notebooks/Deep_MLP (V2).ipynb` and writes `artifacts/model.onnx`
+with the scaler, network and softmax in one graph. The committed model scores
+ROC-AUC 0.7910, F1 0.4778, precision 0.3423 and recall 0.7912 on the test set.
+
+### Run
+
+```bash
+uvicorn app.main:app --port 8000
+# or
+docker build -t jit-risk . && docker run -p 8000:8000 jit-risk
+```
+
+| Endpoint | Returns |
+|---|---|
+| `GET /health` | status and model version |
+| `POST /predict` | `risk_score`, `is_risky`, `threshold`, `model_version` |
+| `GET /docs` | interactive request schema |
+
+`POST /predict` takes the 12 metrics (`la`, `ld`, `nf`, `nd`, `ns`, `ent`,
+`ndev`, `age`, `nuc`, `aexp`, `arexp`, `asexp`). Invalid input returns 422. Set
+the `API_KEY` environment variable to require an `X-API-Key` header.
+
+### Test
+
+```bash
+pytest
+```
+
+### Deploy to Hugging Face Spaces
+
+Create a Space with the Docker SDK, clone it, then:
+
+```powershell
+.\deploy\huggingface\build_space.ps1 -SpaceDir C:\path\to\your-space
+```
+
+Commit and push inside the Space folder. Add `API_KEY` as a Space secret if you
+want the endpoint protected.
+
+## VS Code extension
+
+See [vscode-extension/README.md](vscode-extension/README.md). In short:
+
+```bash
+cd vscode-extension
+npm install
+npm run package
+code --install-extension jit-commit-risk-0.1.0.vsix
+```
+
+Then set `jitRisk.apiUrl` to your API's address.
+
+## How the metrics are computed
+
+The extension computes the 12 metrics with `git`, following what the dataset
+actually contains rather than the textbook definitions. These were checked
+against 300 real Apache ZooKeeper commits (`npm run calibrate`):
+
+- A directory (`nd`) is identified by its name, not its full path.
+- A subsystem (`ns`) is the first path component, so each root-level file
+  counts as its own subsystem.
+- `ndev` is the number of distinct earlier developers across all touched
+  files, divided by the number of files.
+- `age` uses whole days since each file's last change, averaged over files.
+- `asexp` is the author's earlier commits in the subsystem only for commits
+  touching one subsystem. For commits touching several (26% of the dataset)
+  the dataset holds an unrelated value between 0 and 2, which cannot be
+  reproduced from git. The extension sends the dataset median (0.5) for those
+  commits; on the test set this changes ROC-AUC by less than 0.001.
+
+## Limitations
+
+- Precision is about 0.34: roughly two of three flagged commits are fine. Use
+  the score as a review hint, not a merge gate.
+- The model was trained on Apache Java projects from 2003–2014. Scores on
+  other kinds of repository are indicative only.
+- SZZ labels are noisy, which caps how well any model can do on this data.
+
+## References
+
+- H. Keshavarz and M. Nagappan, "ApacheJIT: A large dataset for just-in-time
+  defect prediction," MSR 2022. https://zenodo.org/records/5907002
+- Y. Kamei et al., "A large-scale empirical study of just-in-time quality
+  assurance," IEEE Transactions on Software Engineering, 2013.
+- J. Śliwerski, T. Zimmermann, and A. Zeller, "When do changes induce fixes?,"
+  MSR 2005.
+- S. Ö. Arık and T. Pfister, "TabNet: Attentive interpretable tabular
+  learning," AAAI 2021.
+
+## AI Assistance Disclosure
+
+Portions of the code, experimental design, and report text were developed with
+assistance from Claude (Anthropic). All results were produced by running the
+code on the ApacheJIT dataset, and the authors reviewed and take responsibility
+for the content.

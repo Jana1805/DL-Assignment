@@ -1,0 +1,7 @@
+src/**
+out/test/**
+out/calibrate.*
+**/*.map
+tsconfig.json
+node_modules/**
+.vscode/**

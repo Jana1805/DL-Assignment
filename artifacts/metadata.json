@@ -1,0 +1,39 @@
+{
+  "model_version": "0d356bcb083e",
+  "trained_at": "2026-10-13T17:44:00+00:00",
+  "torch_version": "2.14.1+cpu",
+  "features": [
+    "la",
+    "ld",
+    "nf",
+    "nd",
+    "ns",
+    "ent",
+    "ndev",
+    "age",
+    "nuc",
+    "aexp",
+    "arexp",
+    "asexp",
+    "total_churn",
+    "churn_per_file",
+    "files_per_dir",
+    "add_delete_ratio",
+    "exp_ratio"
+  ],
+  "threshold": 0.5,
+  "epochs": 52,
+  "rows": {
+    "train": 52133,
+    "val": 24430,
+    "test": 30111
+  },
+  "test_metrics": {
+    "accuracy": 0.6659,
+    "precision": 0.3423,
+    "recall": 0.7912,
+    "f1": 0.4778,
+    "roc_auc": 0.791,
+    "pr_auc": 0.4868
+  }
+}
