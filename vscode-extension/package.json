@@ -1,9 +1,22 @@
 {
   "name": "jit-commit-risk",
-  "displayName": "JIT Commit Risk",
-  "description": "Shows a bug-risk score for each commit, from a Just-In-Time defect prediction model.",
-  "version": "0.1.0",
-  "publisher": "janahan",
+  "displayName": "JIT Commit Risk Analyzer",
+  "description": "Analyze Git commit risk using machine learning, with automatic commit scoring and on-demand analysis of staged changes and previous commits.",
+  "version": "0.1.1",
+  "publisher": "Janahan",
+  "icon": "images/icon.png",
+"keywords": [
+  "commit risk",
+  "machine learning",
+  "git",
+  "software quality",
+  "defect prediction",
+  "deep learning"
+],
+"galleryBanner": {
+  "color": "#18233A",
+  "theme": "dark"
+},
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -73,4 +86,5 @@
     "@vscode/vsce": "^3.0.0",
     "typescript": "^5.5.0"
   }
+  
 }
